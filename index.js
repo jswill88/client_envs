@@ -68,6 +68,13 @@ function getNewToken(oAuth2Client, callback) {
   });
 }
 
+const colors = {
+	Staging: "\x1b[33m%s\x1b[0m",
+	Live: "\x1b[31m%s\x1b[0m"
+}
+
+const display = ([client,,env]) => console.log(colors[env.split(' ')[1]], `\n    ${client.padEnd(25, ' ')}${env.split(' ')[1]}`)
+
 function getClients (auth) {
   const sheets = google.sheets({version: 'v4', auth});
   sheets.spreadsheets.values.get({
@@ -77,18 +84,18 @@ function getClients (auth) {
     if (err) return console.log('The API returned an error: ' + err);
     const rows = res.data.values;
 	if(query.length) {
-		let found = rows.find(([client]) => client === query[0])
+		let found = rows.find(([client]) => client === query[0]);
 		if(found) {
-			console.log(`Push ${found[0]} to ${found[2].split(' ')[1]}`)
+			display(found);
 			return;
 		}
-		console.log(`"${query[0]}" not found`);
+		console.log(`\n    "${query[0]}" not found`);
 		return;
 	}
     if (rows.length) {
-	  console.table( rows.map(([client,,env]) => ({'Client Name': client, 'Push To': env.split(' ')[1]})));
-    } else {
-      console.log('No data found.');
+	  rows.forEach(display);
+	  return;
     }
+    console.log('No data found.');
   });
 }
