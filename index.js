@@ -5,7 +5,8 @@ const {google} = require('googleapis');
 const query = process.argv.slice(2)
 
 // If modifying these scopes, delete token.json.
-const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+// const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 // The file token.json stores the user's access and refresh tokens, and is
 // created automatically when the authorization flow completes for the first
 // time.
@@ -70,32 +71,44 @@ function getNewToken(oAuth2Client, callback) {
 
 const colors = {
 	Staging: "\x1b[33m%s\x1b[0m",
-	Live: "\x1b[31m%s\x1b[0m"
+	Live: "\x1b[31m%s\x1b[0m",
 }
 
-const display = ([client,,env]) => console.log(colors[env.split(' ')[1]], `\n    ${client.padEnd(25, ' ')}${env.split(' ')[1]}`)
+const display = ({client, env}) => console.log(colors[env?.split(' ')[1]] || "\x1b[0m%s\x1b[0m", `\n    ${client.padEnd(25, ' ')}${env && env}`)
 
 function getClients (auth) {
-  const sheets = google.sheets({version: 'v4', auth});
-  sheets.spreadsheets.values.get({
-	spreadsheetId: '1-6xjZmh4TCqT-yz_zpbkT0PCBrSh9VfAMwoMuvDbvbc',
-	range: 'Whiteboard!B2:D'
-  }, (err, res) => {
-    if (err) return console.log('The API returned an error: ' + err);
-    const rows = res.data.values;
-	if(query.length) {
-		let found = rows.find(([client]) => client === query[0]);
-		if(found) {
-			display(found);
+	const sheets = google.sheets({version: 'v4', auth});
+	sheets.spreadsheets.get({
+		spreadsheetId: '1-6xjZmh4TCqT-yz_zpbkT0PCBrSh9VfAMwoMuvDbvbc',
+		ranges: ['A1:G'],
+		includeGridData: true
+	}, (err, res) => {
+		if (err) return console.log('The API returned an error: ' + err);
+
+		const clientList = res.data.sheets[0].data[0].rowData
+			.filter(({values}) => values && values[1].formattedValue)
+			.map(({values}) => ({ client: values[1].formattedValue, env: values[3].formattedValue }))
+
+		if(query.length) {
+			let  { values: found }  = res.data.sheets[0].data[0].rowData.find(({values}) => values[1].formattedValue === query[0]) || {};
+			if (found) {
+				found.forEach(({ formattedValue, hyperlink }, i) => {
+					if (i === 3) {
+						console.log(colors[formattedValue.split(' ')[1]], `\n    ${formattedValue}`);
+						return;
+					}
+					if (i === 2) return;
+					console.log(`\n    ${formattedValue}`)
+					if (hyperlink) console.log(`    ${hyperlink}`)
+				})
+				return;
+			}
+			console.log(`\n    "${query[0]}" not found`);
 			return;
 		}
-		console.log(`\n    "${query[0]}" not found`);
-		return;
-	}
-    if (rows.length) {
-	  rows.forEach(display);
-	  return;
-    }
-    console.log('No data found.');
-  });
+		if (clientList.length) {
+			clientList.forEach(display);
+			return;
+		}
+	});
 }
