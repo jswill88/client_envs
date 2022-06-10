@@ -4,12 +4,8 @@ const {google} = require('googleapis');
 
 const query = process.argv.slice(2)
 
-// If modifying these scopes, delete token.json.
-// const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+// If modifying these scopes, delete token.json
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-// The file token.json stores the user's access and refresh tokens, and is
-// created automatically when the authorization flow completes for the first
-// time.
 const TOKEN_PATH = 'token.json';
 
 // Load client secrets from a local file.
@@ -69,46 +65,55 @@ function getNewToken(oAuth2Client, callback) {
   });
 }
 
+const SPREADSHEET_ID = '1-6xjZmh4TCqT-yz_zpbkT0PCBrSh9VfAMwoMuvDbvbc';
 const colors = {
 	Staging: "\x1b[33m%s\x1b[0m",
 	Live: "\x1b[31m%s\x1b[0m",
+	default: "\x1b[0m%s\x1b[0m"
+};
+const indent = '   ';
+const formattedOutput = output => `\n${indent}${output}`;
+const logError = err => console.log('The API returned an error: ' + err);
+
+const getClients = auth => {
+	const sheets = google.sheets({version: 'v4', auth});
+	return query.length ? singleClientData(sheets) : getClientEnvList(sheets);
 }
 
-const display = ({client, env}) => console.log(colors[env?.split(' ')[1]] || "\x1b[0m%s\x1b[0m", `\n    ${client.padEnd(25, ' ')}${env && env}`)
-
-function getClients (auth) {
-	const sheets = google.sheets({version: 'v4', auth});
+const singleClientData = sheets => {
 	sheets.spreadsheets.get({
-		spreadsheetId: '1-6xjZmh4TCqT-yz_zpbkT0PCBrSh9VfAMwoMuvDbvbc',
+		spreadsheetId: SPREADSHEET_ID,
 		ranges: ['A1:G'],
 		includeGridData: true
 	}, (err, res) => {
-		if (err) return console.log('The API returned an error: ' + err);
+		if (err) return logError(err);
 
-		const clientList = res.data.sheets[0].data[0].rowData
-			.filter(({values}) => values && values[1].formattedValue)
-			.map(({values}) => ({ client: values[1].formattedValue, env: values[3].formattedValue }))
+		let  { values: found } = res.data.sheets[0].data[0].rowData.find(({ values }) => values && values[1].formattedValue === query[0]) || {};
 
-		if(query.length) {
-			let  { values: found }  = res.data.sheets[0].data[0].rowData.find(({values}) => values[1].formattedValue === query[0]) || {};
-			if (found) {
-				found.forEach(({ formattedValue, hyperlink }, i) => {
-					if (i === 3) {
-						console.log(colors[formattedValue.split(' ')[1]], `\n    ${formattedValue}`);
-						return;
-					}
-					if (i === 2) return;
-					console.log(`\n    ${formattedValue}`)
-					if (hyperlink) console.log(`    ${hyperlink}`)
-				})
-				return;
-			}
-			console.log(`\n    "${query[0]}" not found`);
-			return;
+		if (found) {
+			return found.map(({ formattedValue, hyperlink }, i) => {
+				if (i === 3) {
+					console.log(colors[formattedValue.split(' ')[1]], formattedOutput(formattedValue));
+					return;
+				}
+				if (i === 2) return;
+				console.log(formattedOutput(formattedValue));
+				if (hyperlink) console.log(`${indent}${hyperlink}`);
+			});
 		}
-		if (clientList.length) {
-			clientList.forEach(display);
-			return;
-		}
+		console.log(formattedOutput(`"${query[0]}" not found`));
+	});
+}
+
+const getClientEnvList = sheets => {
+	sheets.spreadsheets.values.get({
+		spreadsheetId: SPREADSHEET_ID,
+		range: 'B1:D',
+	}, (err, res) => {
+		if (err) return logError(err);
+
+		const display = (client, env) => console.log(colors[env?.split(' ')[1]] || colors.default, formattedOutput(`${client.padEnd(25, ' ')}${env && env}`));
+
+		res.data.values.forEach(([client,,env]) => display(client, env));
 	});
 }
